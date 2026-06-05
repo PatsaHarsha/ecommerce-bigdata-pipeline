@@ -1,0 +1,7 @@
+Z5008 Big Data Lab - Assignment 2 Reflection
+
+a) In the e-commerce domain, a realistic scenario where the lack of ACID transactions would cause a concrete problem is during concurrent writes and reads. For example, if a batch update is modifying order statuses while a reporting query is running on plain Parquet files, the reader might see a partial state (some files updated, others not), leading to inconsistent financial reports. Delta Lake's transaction log prevents this through Atomicity and Isolation; a write is only "visible" once it is fully committed to the log, ensuring that readers always see a consistent, point-in-time snapshot of the table.
+
+b) I would choose RESTORE when I need to permanently roll back the entire table to a previous stable state after a data corruption or accidental delete (e.g., RESTORE TABLE delta.`path` TO VERSION AS OF 10). I would choose time travel reads when I only need to inspect or query historical data without affecting the current production version (e.g., SELECT * FROM delta.`path` VERSION AS OF 5).
+
+c) What I found most surprising and useful was the MERGE operation. Before this lab, I expected updating records in a large dataset to require rewriting the entire table or complex manual partitioning. Seeing how Delta Lake handles UPSERTs and DELETEs in a single atomic command, while keeping a clean history of changes, makes managing silver and gold layers in a data lake much more efficient and developer-friendly.

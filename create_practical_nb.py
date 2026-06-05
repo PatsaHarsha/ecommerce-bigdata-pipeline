@@ -1,0 +1,403 @@
+import json
+import os
+
+notebook = {
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "id": "intro",
+   "metadata": {},
+   "source": [
+    "# Z5008 Big Data Lab — Practical Assignment\n",
+    "**Student Roll Number:** ZDA25M009\n",
+    "\n",
+    "---\n",
+    "## Task 1: Dataset Design and Selection\n",
+    "**Domain:** E-commerce Orders\n",
+    "\n",
+    "### Schema & Data Dictionary\n",
+    "- **`order_id` (String):** Unique identifier for each order.\n",
+    "- **`user_id` (String):** Identifier for the customer.\n",
+    "- **`order_date` (Timestamp):** Date and time the order was placed.\n",
+    "- **`product_category` (String):** Category of the product (e.g., Electronics, Fashion).\n",
+    "- **`order_amount` (Double):** Total amount of the order in USD.\n",
+    "- **`status` (String):** Order status (Completed, Pending, Cancelled, Refunded).\n",
+    "- **`payment_method` (String):** Method used for payment.\n",
+    "\n",
+    "### Data Quality Rules\n",
+    "1. **Rule 1 (Amount):** `order_amount >= 0`\n",
+    "2. **Rule 2 (Date):** `order_date` must be within the year 2025 or 2026.\n",
+    "3. **Rule 3 (Status):** `status` must be one of `['Completed', 'Pending', 'Cancelled', 'Refunded']`.\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": None,
+   "id": "task1-setup",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import pandas as pd\n",
+    "import numpy as np\n",
+    "import random\n",
+    "from datetime import datetime, timedelta\n",
+    "import os\n",
+    "\n",
+    "# Ensure data directory exists\n",
+    "os.makedirs(\"../data/raw\", exist_ok=True)\n",
+    "\n",
+    "print(\"Generating synthetic e-commerce data (50,000+ rows)...\")\n",
+    "n_rows = 55000\n",
+    "np.random.seed(42)\n",
+    "\n",
+    "categories = [\"Electronics\", \"Fashion\", \"Home\", \"Sports\", \"Books\", \"Toys\"]\n",
+    "statuses = [\"Completed\", \"Pending\", \"Cancelled\", \"Refunded\", \"INVALID_STATUS\"] # Injected some invalid for DQ checks\n",
+    "payment_methods = [\"Credit Card\", \"PayPal\", \"Crypto\", \"Bank Transfer\"]\n",
+    "\n",
+    "start_date = datetime(2025, 1, 1)\n",
+    "dates = [start_date + timedelta(minutes=random.randint(0, 525600)) for _ in range(n_rows)]\n",
+    "# Inject some future invalid dates\n",
+    "dates[0] = datetime(2030, 1, 1)\n",
+    "\n",
+    "amounts = np.round(np.random.uniform(-50, 1000, n_rows), 2) # Injected negative amounts for DQ checks\n",
+    "\n",
+    "df_raw = pd.DataFrame({\n",
+    "    \"order_id\": [f\"ORD-{i:06d}\" for i in range(n_rows)],\n",
+    "    \"user_id\": [f\"USR-{random.randint(1000, 9999)}\" for _ in range(n_rows)],\n",
+    "    \"order_date\": dates,\n",
+    "    \"product_category\": [random.choice(categories) for _ in range(n_rows)],\n",
+    "    \"order_amount\": amounts,\n",
+    "    \"status\": [random.choice(statuses) for _ in range(n_rows)],\n",
+    "    \"payment_method\": [random.choice(payment_methods) for _ in range(n_rows)]\n",
+    "})\n",
+    "\n",
+    "raw_path = \"../data/raw/ecommerce_orders.csv\"\n",
+    "df_raw.to_csv(raw_path, index=False)\n",
+    "print(f\"Data successfully written to {raw_path}\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "task2-intro",
+   "metadata": {},
+   "source": [
+    "## Task 2: Ingestion + Lakehouse Storage\n",
+    "Initializing Spark with Delta Lake support and MinIO connectivity."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": None,
+   "id": "task2-spark-init",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from pyspark.sql import SparkSession\n",
+    "from delta import configure_spark_with_delta_pip\n",
+    "\n",
+    "builder = (\n",
+    "    SparkSession.builder\n",
+    "    .appName(\"Z5008-Practical-ZDA25M009\")\n",
+    "    .config(\"spark.sql.extensions\", \"io.delta.sql.DeltaSparkSessionExtension\")\n",
+    "    .config(\"spark.sql.catalog.spark_catalog\", \"org.apache.spark.sql.delta.catalog.DeltaCatalog\")\n",
+    "    .config(\"spark.hadoop.fs.s3a.endpoint\", \"http://minio:9000\")\n",
+    "    .config(\"spark.hadoop.fs.s3a.access.key\", \"admin\")\n",
+    "    .config(\"spark.hadoop.fs.s3a.secret.key\", \"bigdata123\")\n",
+    "    .config(\"spark.hadoop.fs.s3a.path.style.access\", \"true\")\n",
+    "    .config(\"spark.hadoop.fs.s3a.impl\", \"org.apache.hadoop.fs.s3a.S3AFileSystem\")\n",
+    ")\n",
+    "\n",
+    "spark = configure_spark_with_delta_pip(\n",
+    "    builder, \n",
+    "    extra_packages=[\"org.apache.hadoop:hadoop-aws:3.3.4\", \"com.amazonaws:aws-java-sdk-bundle:1.12.262\"]\n",
+    ").getOrCreate()\n",
+    "\n",
+    "spark.sparkContext.setLogLevel(\"WARN\")\n",
+    "print(\"Spark Session Initialized.\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": None,
+   "id": "task2-bronze",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from pyspark.sql.types import StructType, StructField, StringType, DoubleType, TimestampType\n",
+    "from pyspark.sql import functions as F\n",
+    "\n",
+    "# 2.1 Ingest raw data into Spark with explicit schema\n",
+    "schema = StructType([\n",
+    "    StructField(\"order_id\", StringType(), True),\n",
+    "    StructField(\"user_id\", StringType(), True),\n",
+    "    StructField(\"order_date\", TimestampType(), True),\n",
+    "    StructField(\"product_category\", StringType(), True),\n",
+    "    StructField(\"order_amount\", DoubleType(), True),\n",
+    "    StructField(\"status\", StringType(), True),\n",
+    "    StructField(\"payment_method\", StringType(), True)\n",
+    "])\n",
+    "\n",
+    "df_spark_raw = spark.read.csv(raw_path, header=True, schema=schema)\n",
+    "\n",
+    "# 2.2 Write a Bronze table partitioned by date\n",
+    "df_bronze = df_spark_raw.withColumn(\"order_date_only\", F.to_date(\"order_date\"))\n",
+    "BRONZE_PATH = \"s3a://warehouse/bronze/ecommerce/\"\n",
+    "\n",
+    "df_bronze.write.format(\"delta\").mode(\"overwrite\").partitionBy(\"order_date_only\").save(BRONZE_PATH)\n",
+    "print(\"Bronze table written successfully.\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": None,
+   "id": "task2-silver",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# 2.3 Create a Silver table (clean and standardize)\n",
+    "df_silver = spark.read.format(\"delta\").load(BRONZE_PATH)\n",
+    "\n",
+    "# Cleaning: Deduplication and handling nulls\n",
+    "df_silver_clean = df_silver.dropDuplicates([\"order_id\"]) \\\n",
+    "                           .fillna({\"order_amount\": 0.0, \"status\": \"Unknown\"}) \\\n",
+    "                           .withColumn(\"order_amount\", F.round(F.col(\"order_amount\"), 2))\n",
+    "\n",
+    "SILVER_PATH = \"s3a://warehouse/silver/ecommerce/\"\n",
+    "df_silver_clean.write.format(\"delta\").mode(\"overwrite\").save(SILVER_PATH)\n",
+    "print(\"Silver table written successfully.\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": None,
+   "id": "task2-gold",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# 2.4 Create a Gold table (aggregated KPIs)\n",
+    "df_gold = df_silver_clean.filter(F.col(\"status\") == \"Completed\") \\\n",
+    "    .groupBy(\"order_date_only\", \"product_category\") \\\n",
+    "    .agg(\n",
+    "        F.sum(\"order_amount\").alias(\"total_revenue\"),\n",
+    "        F.count(\"order_id\").alias(\"total_orders\")\n",
+    "    )\n",
+    "\n",
+    "GOLD_PATH = \"s3a://warehouse/gold/ecommerce/\"\n",
+    "df_gold.write.format(\"delta\").mode(\"overwrite\").save(GOLD_PATH)\n",
+    "print(\"Gold table written successfully.\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "task3-intro",
+   "metadata": {},
+   "source": [
+    "## Task 3: Spark Transformations + Validations"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": None,
+   "id": "task3-transformations",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from pyspark.sql.window import Window\n",
+    "\n",
+    "df_silver = spark.read.format(\"delta\").load(SILVER_PATH)\n",
+    "\n",
+    "# 3.1 Implement 5 meaningful transformations\n",
+    "# T1: Extract date parts (Year, Month)\n",
+    "df_t1 = df_silver.withColumn(\"order_year\", F.year(\"order_date\")) \\\n",
+    "                 .withColumn(\"order_month\", F.month(\"order_date\"))\n",
+    "\n",
+    "# T2: Bucketing amounts into categories\n",
+    "df_t2 = df_t1.withColumn(\"amount_bucket\", \n",
+    "    F.when(F.col(\"order_amount\") < 50, \"Low\")\n",
+    "     .when(F.col(\"order_amount\") < 200, \"Medium\")\n",
+    "     .otherwise(\"High\")\n",
+    ")\n",
+    "\n",
+    "# T3: Lookup Dimension Join (Creating a dummy dimension DataFrame)\n",
+    "dim_data = [(\"Electronics\", \"Tech\"), (\"Fashion\", \"Apparel\"), (\"Home\", \"Living\")]\n",
+    "dim_schema = StructType([StructField(\"product_category\", StringType()), StructField(\"broad_category\", StringType())])\n",
+    "df_dim = spark.createDataFrame(dim_data, schema=dim_schema)\n",
+    "df_t3 = df_t2.join(df_dim, on=\"product_category\", how=\"left\")\n",
+    "\n",
+    "# T4: Window Function (Running Total of Sales per User)\n",
+    "window_spec = Window.partitionBy(\"user_id\").orderBy(\"order_date\")\n",
+    "df_t4 = df_t3.withColumn(\"cumulative_spend\", F.sum(\"order_amount\").over(window_spec))\n",
+    "\n",
+    "# T5: Conditional Flagging (High Value User Flag)\n",
+    "df_transformed = df_t4.withColumn(\"is_high_value_order\", F.col(\"order_amount\") > 500)\n",
+    "df_transformed.show(5)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": None,
+   "id": "task3-dq-checks",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# 3.2 Data Quality Checks\n",
+    "print(\"--- Data Quality Checks ---\")\n",
+    "\n",
+    "# Rule 1: Non-negative amounts\n",
+    "violating_amounts = df_transformed.filter(F.col(\"order_amount\") < 0)\n",
+    "print(f\"Rule 1 Violations (Negative Amounts): {violating_amounts.count()}\")\n",
+    "if violating_amounts.count() > 0:\n",
+    "    violating_amounts.select(\"order_id\", \"order_amount\").show(5)\n",
+    "# Decision: Flag/Drop. We will filter them out for final analytics.\n",
+    "\n",
+    "# Rule 2: Valid Date Range (2025-2026)\n",
+    "violating_dates = df_transformed.filter(~F.col(\"order_year\").isin(2025, 2026))\n",
+    "print(f\"Rule 2 Violations (Invalid Dates): {violating_dates.count()}\")\n",
+    "if violating_dates.count() > 0:\n",
+    "    violating_dates.select(\"order_id\", \"order_date\").show(5)\n",
+    "# Decision: Drop rows with invalid dates.\n",
+    "\n",
+    "# Rule 3: Allowed Categories\n",
+    "allowed_statuses = [\"Completed\", \"Pending\", \"Cancelled\", \"Refunded\"]\n",
+    "violating_status = df_transformed.filter(~F.col(\"status\").isin(allowed_statuses))\n",
+    "print(f\"Rule 3 Violations (Invalid Status): {violating_status.count()}\")\n",
+    "if violating_status.count() > 0:\n",
+    "    violating_status.select(\"order_id\", \"status\").show(5)\n",
+    "# Decision: Flag and clean these rows in production, here we will filter them.\n",
+    "\n",
+    "# Apply Filtering based on DQ rules\n",
+    "df_cleaned_final = df_transformed.filter(\n",
+    "    (F.col(\"order_amount\") >= 0) & \n",
+    "    (F.col(\"order_year\").isin(2025, 2026)) &\n",
+    "    (F.col(\"status\").isin(allowed_statuses))\n",
+    ")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": None,
+   "id": "task3-analytical-outputs",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# 3.3 Analytical Outputs\n",
+    "os.makedirs(\"../outputs\", exist_ok=True)\n",
+    "\n",
+    "# Output 1: Top 10 Spending Users\n",
+    "top_users = df_cleaned_final.filter(F.col(\"status\") == \"Completed\") \\\n",
+    "    .groupBy(\"user_id\").agg(F.sum(\"order_amount\").alias(\"total_spent\")) \\\n",
+    "    .orderBy(F.desc(\"total_spent\")).limit(10)\n",
+    "\n",
+    "top_users.write.mode(\"overwrite\").parquet(\"s3a://warehouse/gold/outputs/top_10_users.parquet\")\n",
+    "top_users.toPandas().to_csv(\"../outputs/top_10_users.csv\", index=False)\n",
+    "\n",
+    "# Output 2: Daily Revenue Trend\n",
+    "daily_trend = df_cleaned_final.filter(F.col(\"status\") == \"Completed\") \\\n",
+    "    .groupBy(\"order_date_only\").agg(F.sum(\"order_amount\").alias(\"daily_revenue\")) \\\n",
+    "    .orderBy(\"order_date_only\")\n",
+    "\n",
+    "daily_trend.write.mode(\"overwrite\").parquet(\"s3a://warehouse/gold/outputs/daily_revenue_trend.parquet\")\n",
+    "daily_trend.toPandas().to_csv(\"../outputs/daily_revenue_trend.csv\", index=False)\n",
+    "\n",
+    "print(\"Analytical outputs saved successfully.\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "task4-intro",
+   "metadata": {},
+   "source": [
+    "## Task 4: Spark SQL + Performance/Tuning"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": None,
+   "id": "task4-spark-sql",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# 4.1 Register tables and query with Spark SQL\n",
+    "spark.read.format(\"delta\").load(BRONZE_PATH).createOrReplaceTempView(\"bronze_ecommerce\")\n",
+    "spark.read.format(\"delta\").load(SILVER_PATH).createOrReplaceTempView(\"silver_ecommerce\")\n",
+    "spark.read.format(\"delta\").load(GOLD_PATH).createOrReplaceTempView(\"gold_ecommerce\")\n",
+    "\n",
+    "print(\"--- SQL Query 1: Categories with Total Revenue > $1M ---\")\n",
+    "spark.sql(\"\"\"\n",
+    "    SELECT product_category, SUM(total_revenue) as total_category_revenue\n",
+    "    FROM gold_ecommerce\n",
+    "    GROUP BY product_category\n",
+    "    HAVING total_category_revenue > 1000000\n",
+    "\"\"\").show()\n",
+    "\n",
+    "print(\"--- SQL Query 2: Window Function (Rank Users by Total Spend per Category) ---\")\n",
+    "spark.sql(\"\"\"\n",
+    "    WITH UserCategorySpend AS (\n",
+    "        SELECT user_id, product_category, SUM(order_amount) as total_spent\n",
+    "        FROM silver_ecommerce\n",
+    "        WHERE status = 'Completed'\n",
+    "        GROUP BY user_id, product_category\n",
+    "    )\n",
+    "    SELECT *, RANK() OVER (PARTITION BY product_category ORDER BY total_spent DESC) as rank\n",
+    "    FROM UserCategorySpend\n",
+    "    WHERE total_spent IS NOT NULL\n",
+    "    LIMIT 10\n",
+    "\"\"\").show()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": None,
+   "id": "task4-performance",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# 4.2 Performance Evidence\n",
+    "# Explain Plan before caching vs after caching\n",
+    "print(\"Explain Plan (Without Cache):\")\n",
+    "df_query = spark.sql(\"SELECT product_category, SUM(order_amount) FROM silver_ecommerce GROUP BY product_category\")\n",
+    "df_query.explain()\n",
+    "\n",
+    "print(\"\\nExplain Plan (With Cache):\")\n",
+    "spark.catalog.cacheTable(\"silver_ecommerce\")\n",
+    "df_query_cached = spark.sql(\"SELECT product_category, SUM(order_amount) FROM silver_ecommerce GROUP BY product_category\")\n",
+    "df_query_cached.explain()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "task4-reflection",
+   "metadata": {},
+   "source": [
+    "### 4.3 Short Reflection\n",
+    "The biggest bottleneck observed was the repeated reading and shuffling of data from MinIO when executing multiple aggregation queries on the `silver_ecommerce` table. To mitigate this, I applied data caching (`spark.catalog.cacheTable`), which loads the dataset into distributed memory across the worker nodes. As evidenced by the `explain()` plan, caching replaces the physical MinIO file scan with an `InMemoryTableScan`, significantly reducing I/O latency and speeding up downstream Spark SQL queries.\n"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3 (ipykernel)",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.11.7"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}
+
+os.makedirs('c:/Users/HARSHA/Downloads/infrastructure/infrastructure/notebooks', exist_ok=True)
+with open('c:/Users/HARSHA/Downloads/infrastructure/infrastructure/notebooks/practical_ZDA25M009.ipynb', 'w') as f:
+    json.dump(notebook, f, indent=1)
+print("Notebook created successfully.")
