@@ -1,10 +1,10 @@
 # Real-Time E-Commerce User Behavior Analytics & Purchase Prediction System
 
 ## Roll Number Metadata
-**Roll Number:** [Insert Roll Number]
-**Name:** [Insert Name]
-**Course:** [Insert Course Name]
-**Semester:** [Insert Semester]
+**Roll Number:** zda25m009
+**Name:** PATSA HARSHA SAI
+**Course:** Z5008
+**Semester:** SEM 2
 
 ## System Architecture Overview
 This project implements an end-to-end 8-layer architecture for processing streaming e-commerce events and predicting user purchases in real-time.
