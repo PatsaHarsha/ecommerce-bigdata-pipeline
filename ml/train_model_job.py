@@ -2,6 +2,7 @@ from pyspark.sql import SparkSession
 from pyspark.ml.feature import VectorAssembler
 from pyspark.ml.classification import RandomForestClassifier
 from pyspark.ml.evaluation import BinaryClassificationEvaluator
+from pyspark.ml import Pipeline
 import mlflow
 import mlflow.spark
 
@@ -33,11 +34,8 @@ def main():
     feature_cols = ["view_count", "cart_count", "total_session_value", "session_duration_seconds"]
     assembler = VectorAssembler(inputCols=feature_cols, outputCol="features")
     
-    # Transform the dataframe
-    assembled_df = assembler.transform(df)
-
     print("✂️ Splitting data into training (80%) and testing (20%) sets...")
-    train_df, test_df = assembled_df.randomSplit([0.8, 0.2], seed=42)
+    train_df, test_df = df.randomSplit([0.8, 0.2], seed=42)
 
     num_trees = 20
     max_depth = 5
@@ -49,9 +47,10 @@ def main():
         mlflow.log_param("numTrees", num_trees)
         mlflow.log_param("maxDepth", max_depth)
 
-        print("🤖 Initializing and training RandomForestClassifier...")
+        print("🤖 Initializing and training RandomForestClassifier Pipeline...")
         rf = RandomForestClassifier(labelCol="label", featuresCol="features", numTrees=num_trees, maxDepth=max_depth)
-        model = rf.fit(train_df)
+        pipeline = Pipeline(stages=[assembler, rf])
+        model = pipeline.fit(train_df)
 
         print("📈 Evaluating model performance on test set...")
         predictions = model.transform(test_df)

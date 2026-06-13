@@ -7,10 +7,10 @@ import mlflow
 import pandas as pd
 
 # Configure environment for MLflow and MinIO S3 access
-os.environ["MLFLOW_TRACKING_URI"] = "http://localhost:5000"
-os.environ["MLFLOW_S3_ENDPOINT_URL"] = "http://localhost:9000"
-os.environ["AWS_ACCESS_KEY_ID"] = "admin"
-os.environ["AWS_SECRET_ACCESS_KEY"] = "bigdata123"
+os.environ["MLFLOW_TRACKING_URI"] = os.environ.get("MLFLOW_TRACKING_URI", "http://localhost:5000")
+os.environ["MLFLOW_S3_ENDPOINT_URL"] = os.environ.get("MLFLOW_S3_ENDPOINT_URL", "http://localhost:9000")
+os.environ["AWS_ACCESS_KEY_ID"] = os.environ.get("AWS_ACCESS_KEY_ID", "admin")
+os.environ["AWS_SECRET_ACCESS_KEY"] = os.environ.get("AWS_SECRET_ACCESS_KEY", "bigdata123")
 
 try:
     # Pull latest model from MLflow registry into BentoML model store
@@ -28,8 +28,8 @@ spark = (
     .config("spark.driver.host", "127.0.0.1")
     .config("spark.driver.bindAddress", "127.0.0.1")
     .config("spark.jars.packages", "org.apache.hadoop:hadoop-aws:3.3.4")
-    .config("spark.hadoop.fs.s3a.endpoint", "http://localhost:9000")
-    .config("spark.hadoop.fs.s3a.access.key", "admin")
+    .config("spark.hadoop.fs.s3a.endpoint", os.environ.get("MLFLOW_S3_ENDPOINT_URL", "http://localhost:9000"))
+    .config("spark.hadoop.fs.s3a.access.key", os.environ.get("AWS_ACCESS_KEY_ID", "admin"))
     .config("spark.hadoop.fs.s3a.secret.key", "bigdata123")
     .config("spark.hadoop.fs.s3a.path.style.access", "true")
     .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
