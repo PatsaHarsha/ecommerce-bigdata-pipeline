@@ -15,6 +15,19 @@ The pipeline processes a massive **20 million-row eCommerce behavior dataset**.
 * **Features Extracted:** Dynamic sessionization metrics including `view_count`, `cart_count`, `session_duration_seconds`, and `total_session_value`.
 * **Objective:** Predict whether a live user session will result in a successful purchase transaction.
 
+### 📂 Data Requirements for Evaluation
+To ensure the pipeline is reproducible, please place your local copies of the eCommerce dataset (`2019-Oct.csv` and `2019-Nov.csv`) inside the `/dataset` folder.
+
+* **Expected Structure:**
+  ```text
+  ecommerce-bigdata-pipeline/
+  ├── dataset/
+  │   ├── 2019-Oct.csv
+  │   └── 2019-Nov.csv
+  ├── notebooks/
+  └── ...
+  ```
+
 ## 🏗️ System Architecture (8-Layer Stack)
 1. **Ingestion:** Apache Kafka streams raw JSON events.
 2. **Storage:** MinIO (S3-compatible) serves as the Delta Lake object store.
