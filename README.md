@@ -38,6 +38,8 @@ To ensure the pipeline is reproducible, please place your local copies of the eC
 7. **Model Serving:** BentoML exposes a Layer-7 REST API (`/predict`) to serve real-time inferences.
 8. **Observability:** Prometheus scrapes system telemetry, visualized through live Grafana dashboards.
 
+> **Note:** The `model-api` service maintains its own isolated environment via `api/Dockerfile`, ensuring production-grade dependency isolation from the local development environment.
+
 ### 🌐 Service URLs (after boot)
 | Service | URL | Credentials |
 |---|---|---|
@@ -56,7 +58,9 @@ System execution and monitoring screenshots have been captured and stored in the
 * `minio_storage.png`: Local S3 object store configurations.
 * `mlflow_registry.png`: Model tracking and version control interface.
 * `airflow_dag.png`: Orchestration workflow graphs.
-* *Grafana Observability:* Live metrics tracking cluster load (`process_cpu_seconds_total`) and API traffic.
+* `BentoML_Prediction_Service (1).png` & `BentoML_Prediction_Service (2).png`: Live BentoML OpenAPI service page showing the `/predict` endpoint schema.
+* `Grafana_Dashboard.png`: Live Prometheus metrics panel showing `process_cpu_seconds_total` telemetry.
+* `api_predict_response.png`: **End-to-End Inference Verification** — terminal output confirming `{"predicted_purchase": 1}` from a live POST request to `http://localhost:3000/predict`.
 
 ## 🚀 How to Run the Infrastructure
 
@@ -65,6 +69,7 @@ To prevent memory overloading on local machines, boot the core infrastructure fi
 ```bash
 docker-compose up -d kafka minio postgres spark-master spark-worker-1 spark-worker-2 mlflow prometheus grafana
 ```
+> **Note:** `minio-init` is triggered automatically by Docker Compose as a dependent service, ensuring the S3 artifact buckets (`warehouse`, `mlflow-artifacts`) are created before the `model-api` service initiates.
 
 **2. Boot the Model API**
 Once the core network is stable, build and launch the BentoML serving layer:

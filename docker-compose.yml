@@ -17,7 +17,7 @@
 #   MLflow:      http://localhost:5000
 #   MinIO:       http://localhost:9001  (admin/bigdata123)
 #   Airflow:     http://localhost:8090  (admin/admin)
-#   Grafana:     http://localhost:3000  (admin/admin)
+#   Grafana:     http://localhost:3001  (admin/admin)
 #   Prometheus:  http://localhost:9090
 # ================================================================
 
