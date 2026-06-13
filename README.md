@@ -38,6 +38,18 @@ To ensure the pipeline is reproducible, please place your local copies of the eC
 7. **Model Serving:** BentoML exposes a Layer-7 REST API (`/predict`) to serve real-time inferences.
 8. **Observability:** Prometheus scrapes system telemetry, visualized through live Grafana dashboards.
 
+### 🌐 Service URLs (after boot)
+| Service | URL | Credentials |
+|---|---|---|
+| Spark Master UI | http://localhost:8080 | — |
+| Kafka UI | http://localhost:8085 | — |
+| MinIO Console | http://localhost:9001 | admin / bigdata123 |
+| MLflow Tracking | http://localhost:5000 | — |
+| Airflow Web UI | http://localhost:8090 | admin / admin |
+| Grafana Dashboards | http://localhost:3001 | admin / admin |
+| Prometheus | http://localhost:9090 | — |
+| **BentoML Predict API** | **http://localhost:3000/predict** | — |
+
 ## 📸 System Verification & Observability
 System execution and monitoring screenshots have been captured and stored in the `/screenshots` directory to validate the live infrastructure:
 * `spark_cluster_ui.png`: Active Spark Master and Worker node allocation.
