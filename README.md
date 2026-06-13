@@ -1,54 +1,71 @@
-# Real-Time E-Commerce User Behavior Analytics & Purchase Prediction System
+# Real-Time E-Commerce Big Data Pipeline & Machine Learning Lakehouse
 
-## Roll Number Metadata
-**Roll Number:** zda25m009
-**Name:** PATSA HARSHA SAI
-**Course:** Z5008
-**Semester:** SEM 2
+**Author:** Patsa Harsha Sai  
+**Roll Number:** zda25m009  
+**Institution:** IIT Madras Zanzibar  
 
-## System Architecture Overview
-This project implements an end-to-end 8-layer architecture for processing streaming e-commerce events and predicting user purchases in real-time.
+## 📖 Project Description
+This repository contains a complete, end-to-end Real-Time Data Lakehouse architecture. It is designed to ingest, process, and model high-velocity e-commerce event streams to predict user purchase intent. The system is fully containerized across 14 interoperating services, bridging the gap between raw data engineering and production machine learning (MLOps).
 
-1. **Data Ingestion:** Streaming Kaggle 'E-commerce Behavior Data' through Apache Kafka.
-2. **Data Storage:** Persisting raw event streams into MinIO (S3) using Delta Lake.
-3. **Data Processing:** PySpark batch and Structured Streaming jobs loading data from MinIO.
-4. **Feature Engineering:** Sessionizing users and calculating aggregations (e.g., view count, cart count, session duration).
-5. **Model Training:** Training a Spark MLlib Random Forest classifier for purchase prediction.
-6. **Experiment Tracking:** Logging hyperparameters, metrics, and models using MLflow.
-7. **Model Serving:** (Next Step) Containerizing the MLflow model into a REST API via BentoML.
-8. **Monitoring:** (Planned) System metrics via Prometheus and Grafana.
+By natively wrapping PySpark `PipelineModels` and routing distributed object storage through local Docker DNS, the architecture achieves a highly resilient, real-time REST API capable of serving predictions from raw JSON inputs.
 
-## Setup and Execution Steps
+## 📊 The Dataset
+The pipeline processes a massive **20 million-row eCommerce behavior dataset**. 
+* **Scope:** User session events (views, cart additions, purchases).
+* **Features Extracted:** Dynamic sessionization metrics including `view_count`, `cart_count`, `session_duration_seconds`, and `total_session_value`.
+* **Objective:** Predict whether a live user session will result in a successful purchase transaction.
 
-### 1. Prerequisites
-- Docker and Docker Compose installed
-- Python 3.9+ installed
-- Java 11+ installed
+## 🏗️ System Architecture (8-Layer Stack)
+1. **Ingestion:** Apache Kafka streams raw JSON events.
+2. **Storage:** MinIO (S3-compatible) serves as the Delta Lake object store.
+3. **Processing:** Apache Spark (Standalone Cluster with 1 Master, 2 Workers) handles both structured streaming and batch feature engineering.
+4. **Machine Learning:** Distributed Random Forest trained via PySpark.
+5. **Model Registry:** MLflow tracks experiments, hyperparameter tuning, and stores the serialized Pipeline weights.
+6. **Orchestration:** Apache Airflow schedules and monitors DAG executions.
+7. **Model Serving:** BentoML exposes a Layer-7 REST API (`/predict`) to serve real-time inferences.
+8. **Observability:** Prometheus scrapes system telemetry, visualized through live Grafana dashboards.
 
-### 2. Environment Configuration
-Copy the sample environment file and configure your local credentials:
+## 📸 System Verification & Observability
+System execution and monitoring screenshots have been captured and stored in the `/screenshots` directory to validate the live infrastructure:
+* `spark_cluster_ui.png`: Active Spark Master and Worker node allocation.
+* `minio_storage.png`: Local S3 object store configurations.
+* `mlflow_registry.png`: Model tracking and version control interface.
+* `airflow_dag.png`: Orchestration workflow graphs.
+* *Grafana Observability:* Live metrics tracking cluster load (`process_cpu_seconds_total`) and API traffic.
+
+## 🚀 How to Run the Infrastructure
+
+**1. Staged Boot Sequence**
+To prevent memory overloading on local machines, boot the core infrastructure first:
 ```bash
-cp .env.example .env
+docker-compose up -d kafka minio postgres spark-master spark-worker-1 spark-worker-2 mlflow prometheus grafana
 ```
 
-### 3. Spin Up the Infrastructure
-Start the Kafka, MinIO, Spark, MLflow, and Postgres containers:
+**2. Boot the Model API**
+Once the core network is stable, build and launch the BentoML serving layer:
 ```bash
-docker-compose up -d
+docker-compose up -d --build model-api
 ```
+*(Allow 2-3 minutes for the API to pull Maven dependencies and deserialize the PySpark Pipeline from MinIO).*
 
-### 4. Running the Pipeline
-- **Start Ingestion:** `python data/kaggle_producer.py`
-- **Start Streaming Consumer:** `spark-submit spark_jobs/spark_streaming_consumer.py`
-- **Feature Engineering:** `spark-submit spark_jobs/feature_engineering_job.py`
-- **Model Training:** `spark-submit ml/train_model_job.py`
+**3. Live API Verification**
+Send a test payload to the serving endpoint:
+```python
+import urllib.request, json
 
-### 5. Accessing UIs
-- **JupyterLab:** `http://localhost:8888`
-- **MLflow:** `http://localhost:5000`
-- **Kafka UI:** `http://localhost:8080`
-- **MinIO:** `http://localhost:9001`
-- **Spark Master:** `http://localhost:8081`
+data = {
+    "view_count": 5, 
+    "cart_count": 1, 
+    "total_session_value": 245.50, 
+    "session_duration_seconds": 320
+}
 
-## AI Tools Declaration
-In accordance with course policies, development assistants and AI tools were utilized during the creation of this project. These tools assisted in code generation, infrastructure containerization, PySpark script drafting, and MLflow integration to ensure a robust and well-documented architecture. All AI-generated code has been reviewed, tested, and integrated manually.
+req = urllib.request.Request(
+    'http://localhost:3000/predict', 
+    data=json.dumps(data).encode(), 
+    headers={'Content-Type': 'application/json'}
+)
+res = urllib.request.urlopen(req)
+print(res.read().decode())
+# Expected Output: {"predicted_purchase": 1.0}
+```
