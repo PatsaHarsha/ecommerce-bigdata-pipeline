@@ -197,7 +197,7 @@ services:
       retries: 3
 
 
-  # MinIO bucket initialisation (creates 'warehouse' and 'mlflow-artifacts' buckets)
+  # MinIO bucket initialisation (creates 'warehouse', 'mlflow-artifacts', 'kafka-connect', and 'ecommerce-lakehouse' buckets)
   minio-init:
     image: minio/mc:latest
     container_name: minio-init
@@ -209,6 +209,7 @@ services:
       /usr/bin/mc mb --ignore-existing myminio/warehouse;
       /usr/bin/mc mb --ignore-existing myminio/mlflow-artifacts;
       /usr/bin/mc mb --ignore-existing myminio/kafka-connect;
+      /usr/bin/mc mb --ignore-existing myminio/ecommerce-lakehouse;
       echo 'Buckets created successfully';
       exit 0;
       "
