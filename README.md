@@ -5,7 +5,7 @@
 **Institution:** IIT Madras Zanzibar  
 
 ## 📖 Project Description
-This repository contains a complete, end-to-end Real-Time Data Lakehouse architecture. It is designed to ingest, process, and model high-velocity e-commerce event streams to predict user purchase intent. The system is fully containerized across 14 interoperating services, bridging the gap between raw data engineering and production machine learning (MLOps).
+This repository contains a complete, end-to-end Real-Time Data Lakehouse architecture. It is designed to ingest, process, and model high-velocity e-commerce event streams to predict user purchase intent. The system is fully containerized across 16 interoperating services, bridging the gap between raw data engineering and production machine learning (MLOps).
 
 By natively wrapping PySpark `PipelineModels` and routing distributed object storage through local Docker DNS, the architecture achieves a highly resilient, real-time REST API capable of serving predictions from raw JSON inputs.
 
