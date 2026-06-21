@@ -25,7 +25,7 @@
 
 # ---- Shared Spark environment ----
 x-spark-common: &spark-common
-  image: bitnamilegacy/spark:latest
+  image: bitnamilegacy/spark:3.5.1
   environment:
     - SPARK_RPC_AUTHENTICATION_ENABLED=no
     - SPARK_RPC_ENCRYPTION_ENABLED=no
