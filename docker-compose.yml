@@ -108,7 +108,8 @@ services:
   # JUPYTERLAB (PySpark + Delta Lake + all libraries)
   # ============================================================
   jupyter:
-    image: quay.io/jupyter/pyspark-notebook:spark-3.5.0
+    build:
+      context: ./jupyter
     container_name: jupyter
     ports:
       - "8888:8888"
