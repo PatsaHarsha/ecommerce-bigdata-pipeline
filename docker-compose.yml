@@ -302,6 +302,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
     networks:
       - bigdata-net
 
@@ -320,6 +322,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
     networks:
       - bigdata-net
 
@@ -374,7 +378,10 @@ services:
       - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER:-admin}
       - AWS_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD:-bigdata123}
     depends_on:
-      - mlflow
+      mlflow:
+        condition: service_started
+      minio:
+        condition: service_healthy
     networks:
       - bigdata-net
 
