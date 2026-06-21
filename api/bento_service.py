@@ -1,5 +1,4 @@
 import os
-os.environ["HADOOP_HOME"] = r"H:\m.tech\infrastructure\infrastructure\winutils"
 os.environ["SPARK_LOCAL_IP"] = "127.0.0.1"
 
 import bentoml
@@ -30,7 +29,7 @@ spark = (
     .config("spark.jars.packages", "org.apache.hadoop:hadoop-aws:3.3.4")
     .config("spark.hadoop.fs.s3a.endpoint", os.environ.get("MLFLOW_S3_ENDPOINT_URL", "http://localhost:9000"))
     .config("spark.hadoop.fs.s3a.access.key", os.environ.get("AWS_ACCESS_KEY_ID", "admin"))
-    .config("spark.hadoop.fs.s3a.secret.key", "bigdata123")
+    .config("spark.hadoop.fs.s3a.secret.key", os.environ.get("AWS_SECRET_ACCESS_KEY", "bigdata123"))
     .config("spark.hadoop.fs.s3a.path.style.access", "true")
     .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
     .getOrCreate()
