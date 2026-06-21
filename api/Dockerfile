@@ -1,12 +1,13 @@
 FROM python:3.9-slim
 
-RUN apt-get update && apt-get install -y default-jre
+RUN apt-get update && apt-get install -y default-jre && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-COPY bento_service.py .
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-RUN pip install --no-cache-dir bentoml mlflow boto3 pyspark
+COPY bento_service.py .
 
 EXPOSE 3000
 

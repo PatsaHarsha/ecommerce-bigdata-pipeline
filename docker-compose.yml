@@ -25,7 +25,7 @@
 
 # ---- Shared Spark environment ----
 x-spark-common: &spark-common
-  image: bitnamilegacy/spark:latest
+  image: bitnamilegacy/spark:3.5.1
   environment:
     - SPARK_RPC_AUTHENTICATION_ENABLED=no
     - SPARK_RPC_ENCRYPTION_ENABLED=no
@@ -108,7 +108,8 @@ services:
   # JUPYTERLAB (PySpark + Delta Lake + all libraries)
   # ============================================================
   jupyter:
-    image: quay.io/jupyter/pyspark-notebook:spark-3.5.0
+    build:
+      context: ./jupyter
     container_name: jupyter
     ports:
       - "8888:8888"
@@ -197,7 +198,7 @@ services:
       retries: 3
 
 
-  # MinIO bucket initialisation (creates 'warehouse' and 'mlflow-artifacts' buckets)
+  # MinIO bucket initialisation (creates 'warehouse', 'mlflow-artifacts', 'kafka-connect', and 'ecommerce-lakehouse' buckets)
   minio-init:
     image: minio/mc:latest
     container_name: minio-init
@@ -209,6 +210,7 @@ services:
       /usr/bin/mc mb --ignore-existing myminio/warehouse;
       /usr/bin/mc mb --ignore-existing myminio/mlflow-artifacts;
       /usr/bin/mc mb --ignore-existing myminio/kafka-connect;
+      /usr/bin/mc mb --ignore-existing myminio/ecommerce-lakehouse;
       echo 'Buckets created successfully';
       exit 0;
       "
@@ -226,7 +228,6 @@ services:
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_MULTIPLE_DATABASES: airflow,mlflow
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./config/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
@@ -253,7 +254,7 @@ services:
       - AWS_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD:-bigdata123}
       - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
     command: >
-      /bin/sh -c "pip install psycopg2-binary && mlflow server --backend-store-uri postgresql://mlflow:mlflow@postgres:5432/mlflow --default-artifact-root s3://mlflow-artifacts/ --host 0.0.0.0 --port 5000"
+      /bin/sh -c "pip install psycopg2-binary boto3 && mlflow server --backend-store-uri postgresql://mlflow:mlflow@postgres:5432/mlflow --default-artifact-root s3://mlflow-artifacts/ --host 0.0.0.0 --port 5000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -266,7 +267,8 @@ services:
   # APACHE AIRFLOW 2.9 — Pipeline Orchestration
   # ============================================================
   airflow-init:
-    image: apache/airflow:2.9.1-python3.11
+    build:
+      context: ./airflow
     container_name: airflow-init
     environment:
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
@@ -283,7 +285,8 @@ services:
       - bigdata-net
 
   airflow:
-    image: apache/airflow:2.9.1-python3.11
+    build:
+      context: ./airflow
     container_name: airflow
     ports:
       - "8090:8080"   # Airflow Web UI
@@ -293,32 +296,45 @@ services:
       - AIRFLOW__CORE__LOAD_EXAMPLES=false
       - AIRFLOW__WEBSERVER__SECRET_KEY=bigdatalab2026
       - AIRFLOW__WEBSERVER__WORKERS=2
-      - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session    
+      - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session
+      - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER:-admin}
+      - AWS_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD:-bigdata123}
     command: webserver
     volumes:
       - ./dags:/opt/airflow/dags
       - airflow-logs:/opt/airflow/logs
+      - ./spark_jobs:/opt/airflow/jobs/spark_jobs
+      - ./ml:/opt/airflow/jobs/ml
     depends_on:
       postgres:
         condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
     networks:
       - bigdata-net
 
   airflow-scheduler:
-    image: apache/airflow:2.9.1-python3.11
+    build:
+      context: ./airflow
     container_name: airflow-scheduler
     environment:
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__CORE__LOAD_EXAMPLES=false
       - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session
+      - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER:-admin}
+      - AWS_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD:-bigdata123}
     command: scheduler
     volumes:
       - ./dags:/opt/airflow/dags
       - airflow-logs:/opt/airflow/logs
+      - ./spark_jobs:/opt/airflow/jobs/spark_jobs
+      - ./ml:/opt/airflow/jobs/ml
     depends_on:
       postgres:
         condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
     networks:
       - bigdata-net
 
@@ -373,7 +389,10 @@ services:
       - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER:-admin}
       - AWS_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD:-bigdata123}
     depends_on:
-      - mlflow
+      mlflow:
+        condition: service_started
+      minio:
+        condition: service_healthy
     networks:
       - bigdata-net
 

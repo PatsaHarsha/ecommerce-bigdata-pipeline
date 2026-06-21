@@ -10,3 +10,7 @@ scrape_configs:
   - job_name: 'spark'
     static_configs:
       - targets: ['spark-master:8080']
+
+  - job_name: 'model-api'
+    static_configs:
+      - targets: ['model-api:3000']
