@@ -267,7 +267,8 @@ services:
   # APACHE AIRFLOW 2.9 — Pipeline Orchestration
   # ============================================================
   airflow-init:
-    image: apache/airflow:2.9.1-python3.11
+    build:
+      context: ./airflow
     container_name: airflow-init
     environment:
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
@@ -284,7 +285,8 @@ services:
       - bigdata-net
 
   airflow:
-    image: apache/airflow:2.9.1-python3.11
+    build:
+      context: ./airflow
     container_name: airflow
     ports:
       - "8090:8080"   # Airflow Web UI
@@ -294,11 +296,15 @@ services:
       - AIRFLOW__CORE__LOAD_EXAMPLES=false
       - AIRFLOW__WEBSERVER__SECRET_KEY=bigdatalab2026
       - AIRFLOW__WEBSERVER__WORKERS=2
-      - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session    
+      - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session
+      - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER:-admin}
+      - AWS_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD:-bigdata123}
     command: webserver
     volumes:
       - ./dags:/opt/airflow/dags
       - airflow-logs:/opt/airflow/logs
+      - ./spark_jobs:/opt/airflow/jobs/spark_jobs
+      - ./ml:/opt/airflow/jobs/ml
     depends_on:
       postgres:
         condition: service_healthy
@@ -308,17 +314,22 @@ services:
       - bigdata-net
 
   airflow-scheduler:
-    image: apache/airflow:2.9.1-python3.11
+    build:
+      context: ./airflow
     container_name: airflow-scheduler
     environment:
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__CORE__LOAD_EXAMPLES=false
       - AIRFLOW__API__AUTH_BACKENDS=airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session
+      - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER:-admin}
+      - AWS_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD:-bigdata123}
     command: scheduler
     volumes:
       - ./dags:/opt/airflow/dags
       - airflow-logs:/opt/airflow/logs
+      - ./spark_jobs:/opt/airflow/jobs/spark_jobs
+      - ./ml:/opt/airflow/jobs/ml
     depends_on:
       postgres:
         condition: service_healthy
